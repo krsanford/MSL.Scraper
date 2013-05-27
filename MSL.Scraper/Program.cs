@@ -48,6 +48,7 @@ namespace MSL.Scraper
     class Program
     {
         private static ConcurrentQueue<Exception> errorCollection = new ConcurrentQueue<Exception>();
+        private static HtmlDocument basePage;
 
         static void Main(string[] args)
         {
@@ -88,8 +89,9 @@ namespace MSL.Scraper
             }
 
             Console.WriteLine();
-            Console.WriteLine("Process Complete...");
+            Console.WriteLine("Process Complete, press any key to close...");
             Console.WriteLine();
+            Console.Read();
         }
 
         private static void DownloadImages(Cam cam)
@@ -98,8 +100,14 @@ namespace MSL.Scraper
             int imagesProcessed = 0;
             int imagesDownloaded = 0;
 
-            HtmlWeb baseWeb = new HtmlWeb();
-            HtmlDocument basePage = baseWeb.Load(MslCamConstants.RawImageUrl);
+            if (basePage == null)
+            {
+                Console.Clear();
+                Console.WriteLine(String.Format("Attempting to contact {0}", MslCamConstants.RawImageUrl));
+
+                HtmlWeb baseWeb = new HtmlWeb();
+                basePage = TryLoadDoc(MslCamConstants.RawImageUrl, baseWeb);
+            }
 
             HtmlNodeCollection baseContainers = basePage.DocumentNode.SelectNodes(@"//div[@class='image_set_container']");
 
@@ -124,7 +132,7 @@ namespace MSL.Scraper
                             {
                                 HtmlWeb solWeb = new HtmlWeb();
                                 HtmlDocument solDoc;
-                                solDoc = TryLoadDoc(solUrl, solWeb);
+                                solDoc = TryLoadDoc(String.Format("{0}{1}", MslCamConstants.RawImageUrl, solUrl), solWeb);
 
                                 HtmlNode solContent = solDoc.DocumentNode.SelectSingleNode(@"//td[@class='pageContent']");
                                 HtmlNodeCollection solTables = solContent.SelectNodes(@".//table");
@@ -289,10 +297,10 @@ namespace MSL.Scraper
             }
         }
 
-        private static HtmlDocument TryLoadDoc(string solUrl, HtmlWeb solWeb)
+        private static HtmlDocument TryLoadDoc(string url, HtmlWeb web)
         {
-            if (String.IsNullOrWhiteSpace(solUrl)) throw new ArgumentNullException("solUrl");
-            if (solWeb == null) throw new ArgumentNullException("solWeb");
+            if (String.IsNullOrWhiteSpace(url)) throw new ArgumentNullException("solUrl");
+            if (web == null) throw new ArgumentNullException("solWeb");
 
             HtmlDocument solDoc = new HtmlDocument();
             int attempt = 0;
@@ -301,7 +309,7 @@ namespace MSL.Scraper
             {
                 try
                 {
-                    solDoc = solWeb.Load(MslCamConstants.RawImageUrl + solUrl);
+                    solDoc = web.Load(url);
                     break;
                 }
                 catch (Exception)
