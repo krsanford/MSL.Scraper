@@ -9,6 +9,7 @@ using System.Net;
 using System.Threading.Tasks;
 using System.Collections.Concurrent;
 using System.Threading;
+using AForge.Imaging.Filters;
 
 namespace MSL.Scraper
 {
@@ -55,7 +56,7 @@ namespace MSL.Scraper
             List<Cam> camsToProcess = new List<Cam>()
             {
                 MslCamConstants.FrontHazcamLeft,
-                //MslCamConstants.FrontHazcamRight,
+                MslCamConstants.FrontHazcamRight,
                 //MslCamConstants.RearHazcamLeft,
                 //MslCamConstants.RearHazcamRight,
                 //MslCamConstants.NavcamLeft,
@@ -76,6 +77,17 @@ namespace MSL.Scraper
                     Console.WriteLine(String.Format("{0}: {1}", errorMessage, ex.Message));
                     errorCollection.Enqueue(new Exception(errorMessage, ex));
                 }
+            }
+
+            try
+            {
+                TryCreate3DVideos(camsToProcess);
+            }
+            catch (Exception ex)
+            {
+                string errorMessage = String.Format("ERROR while processing 3D Videos");
+                Console.WriteLine(String.Format("{0}: {1}", errorMessage, ex.Message));
+                errorCollection.Enqueue(new Exception(errorMessage, ex));
             }
 
             Console.Clear();
@@ -292,6 +304,109 @@ namespace MSL.Scraper
             catch (Exception ex)
             {
                 string errorMessage = String.Format("ERROR while creating video for {0}", cam.CamName);
+                Console.WriteLine(String.Format("{0}: {1}", errorMessage, ex.Message));
+                errorCollection.Enqueue(new Exception(errorMessage, ex));
+            }
+        }
+
+        private static void TryCreate3DVideos(List<Cam> camsToProcess)
+        {
+            if (camsToProcess == null) throw new ArgumentNullException("camsToProcess");
+
+            if (camsToProcess.Contains(MslCamConstants.FrontHazcamLeft) && camsToProcess.Contains(MslCamConstants.FrontHazcamRight))
+            {
+                Create3DVideo(MslCamConstants.FrontHazcamLeft, MslCamConstants.FrontHazcamRight);
+            }
+            else if (camsToProcess.Contains(MslCamConstants.RearHazcamLeft) && camsToProcess.Contains(MslCamConstants.RearHazcamRight))
+            {
+                Create3DVideo(MslCamConstants.RearHazcamLeft, MslCamConstants.RearHazcamRight);
+            }
+            else if (camsToProcess.Contains(MslCamConstants.NavcamLeft) && camsToProcess.Contains(MslCamConstants.NavcamRight))
+            {
+                Create3DVideo(MslCamConstants.NavcamLeft, MslCamConstants.NavcamRight);
+            }
+        }
+
+        private static void Create3DVideo(Cam leftCam, Cam rightCam)
+        {
+            if (leftCam == null) throw new ArgumentNullException("leftCam");
+            if (rightCam == null) throw new ArgumentNullException("rightCam");
+
+            string camSaveDirectory = PrepareSaveDirectory(leftCam.CamContainer);
+            string videoFileName = String.Format("{0}{1} {2}.mpeg", camSaveDirectory, leftCam.CamContainer, DateTime.Now.ToString("MMM-dd-yyyy-HH-mm"));
+
+            if (File.Exists(videoFileName))
+                File.Delete(videoFileName);
+
+            try
+            {
+                using (VideoFileWriter videoWriter = new VideoFileWriter())
+                {
+                    videoWriter.Open(videoFileName, MslCamConstants.FullDataProductWidth, MslCamConstants.FullDataProductHeight);
+
+                    int totalImageCount = 0;
+                    using (MSLScraperEntities mslContext = new MSLScraperEntities())
+                    {
+                        totalImageCount = (from A in
+                                               (from a1 in mslContext.SolImageData where a1.Cam.Contains(leftCam.CamName) select a1)
+                                           from B in
+                                               (from b1 in mslContext.SolImageData where b1.Cam.Contains(rightCam.CamName) select b1)
+                                           where A.Sol == B.Sol && A.TimeStamp == B.TimeStamp select A).Count();
+                    }
+
+                    int take = 15;
+                    int processedCount = 0;
+                    for (int skip = 0; skip < totalImageCount; skip = skip + take)
+                    {
+                        using (MSLScraperEntities mslContext = new MSLScraperEntities())
+                        {
+                            var imagesToProcess = (from A in
+                                                       (from a1 in mslContext.SolImageData where a1.Cam.Contains(leftCam.CamName) select a1)
+                                                   from B in
+                                                       (from b1 in mslContext.SolImageData where b1.Cam.Contains(rightCam.CamName) select b1)
+                                                   where A.Sol == B.Sol && A.TimeStamp == B.TimeStamp
+                                                   orderby A.TimeStamp
+                                                   select new { LeftCam = A, RightCam = B }).Skip(skip).Take(take);
+                            
+                            foreach (var imagePair in imagesToProcess)
+                            {
+                                using (MemoryStream msLeft = new MemoryStream(imagePair.LeftCam.ImageData))
+                                using (Bitmap bitmapLeft = (Bitmap)Image.FromStream(msLeft))
+                                using (MemoryStream msRight = new MemoryStream(imagePair.RightCam.ImageData))
+                                using (Bitmap bitmapRight = (Bitmap)Image.FromStream(msRight))
+                                {
+                                    if (bitmapLeft.Width == videoWriter.Width && bitmapLeft.Height == videoWriter.Height &&
+                                        bitmapRight.Width == videoWriter.Width && bitmapRight.Height == videoWriter.Height)
+                                    {
+                                        StereoAnaglyph filter = new StereoAnaglyph(StereoAnaglyph.Algorithm.GrayAnaglyph);
+                                        filter.OverlayImage = AForge.Imaging.Image.Clone(bitmapRight, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+                                        
+                                        using (Bitmap bitmap3D = filter.Apply(AForge.Imaging.Image.Clone(bitmapLeft, System.Drawing.Imaging.PixelFormat.Format24bppRgb)))
+                                        using (Bitmap newBitmap = new Bitmap(bitmapLeft.Width, bitmapLeft.Height))
+                                        using (Graphics g = Graphics.FromImage(newBitmap))
+                                        {
+                                            g.DrawImage(bitmap3D, 0, 0);
+                                            g.DrawString(String.Format("{0} - Sol: {1}", leftCam.CamContainer, imagePair.LeftCam.Sol), new Font(FontFamily.GenericSansSerif, 30, FontStyle.Bold), Brushes.White, new PointF(10, 10));
+
+                                            for (int i = 0; i < 4; i++)
+                                            {
+                                                videoWriter.WriteVideoFrame(newBitmap);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                processedCount++;
+                                Console.Clear();
+                                Console.WriteLine(string.Format("3D processing: {0} of {1} images processed for {2}", processedCount, totalImageCount, leftCam.CamContainer));
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                string errorMessage = String.Format("ERROR while creating 3D video for {0}", leftCam.CamContainer);
                 Console.WriteLine(String.Format("{0}: {1}", errorMessage, ex.Message));
                 errorCollection.Enqueue(new Exception(errorMessage, ex));
             }

@@ -55,6 +55,10 @@
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="AForge.Imaging, Version=2.2.4.0, Culture=neutral, PublicKeyToken=ba8ddea9676ca48b, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>Lib\AForge.Imaging.dll</HintPath>
+    </Reference>
     <Reference Include="AForge.Video.FFMPEG">
       <HintPath>..\..\..\..\..\..\..\Program Files (x86)\AForge.NET\Framework\Release\AForge.Video.FFMPEG.dll</HintPath>
     </Reference>
@@ -132,6 +136,8 @@
     <None Include="Lib\swscale-2.dll" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Lib\AForge.dll" />
+    <Content Include="Lib\AForge.Imaging.dll" />
     <Content Include="Lib\AForge.Video.dll" />
     <Content Include="Lib\AForge.Video.FFMPEG.dll" />
     <Content Include="SQL\MSLScraper Stats.sql" />
