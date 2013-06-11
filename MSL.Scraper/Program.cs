@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using System.Collections.Concurrent;
 using System.Threading;
 using AForge.Imaging.Filters;
+using System.Diagnostics;
 
 namespace MSL.Scraper
 {
@@ -37,9 +38,8 @@ namespace MSL.Scraper
         public static Cam NavcamLeft = new Cam("Navcam: Left", "Left Navigation Camera");
         public static Cam NavcamRight = new Cam("Navcam: Right", "Right Navigation Camera");
 
-        public const string FullDataProductName = "FULL";
-        public const int FullDataProductWidth = 1024;
-        public const int FullDataProductHeight = 1024;
+        public const string FullDataProductName = "FULL"; 
+        public static Size FullDataProductSize = new Size(1024, 1024);
 
         public const string SaveBaseDirectory = @"C:\MSLScraper\";
 
@@ -256,7 +256,7 @@ namespace MSL.Scraper
             {
                 using (VideoFileWriter videoWriter = new VideoFileWriter())
                 {
-                    videoWriter.Open(videoFileName, MslCamConstants.FullDataProductWidth, MslCamConstants.FullDataProductHeight);
+                    videoWriter.Open(videoFileName, MslCamConstants.FullDataProductSize.Width, MslCamConstants.FullDataProductSize.Height);
 
                     int totalImageCount = 0;
                     using (MSLScraperEntities mslContext = new MSLScraperEntities())
@@ -285,7 +285,7 @@ namespace MSL.Scraper
                                             g.DrawImage(bitmap, 0, 0);
                                             g.DrawString(String.Format("{0} - Sol: {1}", solImage.Cam, solImage.Sol), new Font(FontFamily.GenericSansSerif, 30, FontStyle.Bold), Brushes.White, new PointF(10, 10));
 
-                                            for (int i = 0; i < 4; i++)
+                                            for (int i = 0; i < MslCamConstants.VideoFramesPerImage; i++)
                                             {
                                                 videoWriter.WriteVideoFrame(newBitmap);
                                             }
@@ -342,7 +342,7 @@ namespace MSL.Scraper
             {
                 using (VideoFileWriter videoWriter = new VideoFileWriter())
                 {
-                    videoWriter.Open(videoFileName, MslCamConstants.FullDataProductWidth, MslCamConstants.FullDataProductHeight);
+                    videoWriter.Open(videoFileName, MslCamConstants.FullDataProductSize.Width, MslCamConstants.FullDataProductSize.Height);
 
                     int totalImageCount = 0;
                     using (MSLScraperEntities mslContext = new MSLScraperEntities())
@@ -378,7 +378,7 @@ namespace MSL.Scraper
                                     if (bitmapLeft.Width == videoWriter.Width && bitmapLeft.Height == videoWriter.Height &&
                                         bitmapRight.Width == videoWriter.Width && bitmapRight.Height == videoWriter.Height)
                                     {
-                                        StereoAnaglyph filter = new StereoAnaglyph(StereoAnaglyph.Algorithm.GrayAnaglyph);
+                                        StereoAnaglyph filter = new StereoAnaglyph(StereoAnaglyph.Algorithm.TrueAnaglyph);
                                         filter.OverlayImage = AForge.Imaging.Image.Clone(bitmapRight, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
                                         
                                         using (Bitmap bitmap3D = filter.Apply(AForge.Imaging.Image.Clone(bitmapLeft, System.Drawing.Imaging.PixelFormat.Format24bppRgb)))
@@ -388,7 +388,7 @@ namespace MSL.Scraper
                                             g.DrawImage(bitmap3D, 0, 0);
                                             g.DrawString(String.Format("{0} - Sol: {1}", leftCam.CamContainer, imagePair.LeftCam.Sol), new Font(FontFamily.GenericSansSerif, 30, FontStyle.Bold), Brushes.White, new PointF(10, 10));
 
-                                            for (int i = 0; i < 4; i++)
+                                            for (int i = 0; i < MslCamConstants.VideoFramesPerImage; i++)
                                             {
                                                 videoWriter.WriteVideoFrame(newBitmap);
                                             }
@@ -455,7 +455,7 @@ namespace MSL.Scraper
                         {
                             bitmap = Bitmap.FromStream(stream);
 
-                            if (bitmap.Width < MslCamConstants.FullDataProductWidth && bitmap.Height < MslCamConstants.FullDataProductHeight)
+                            if (bitmap.Width < MslCamConstants.FullDataProductSize.Width || bitmap.Height < MslCamConstants.FullDataProductSize.Height)
                             {
                                 bitmap.Dispose();
                                 bitmap = null;
